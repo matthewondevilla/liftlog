@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f0f13">
+  <title>LiftLog</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="liftlog.css">
+</head>
+<body>
+
+<div id="desk-layout">
+
+  <!-- ── Desktop sidebar ──────────────────────────────── -->
+  <nav id="desk-nav">
+    <div class="desk-logo"><i class="fa-solid fa-dumbbell me-2"></i>LiftLog</div>
+    <button class="dnav-btn active" id="d-home"     onclick="nav('home')">    <i class="fa-solid fa-house fa-fw"></i>Home</button>
+    <button class="dnav-btn"        id="d-workout"  onclick="nav('workout')"> <i class="fa-solid fa-dumbbell fa-fw"></i>Workout</button>
+    <button class="dnav-btn"        id="d-history"  onclick="nav('history')"> <i class="fa-solid fa-calendar fa-fw"></i>History</button>
+    <button class="dnav-btn"        id="d-stats"    onclick="nav('stats')">   <i class="fa-solid fa-chart-bar fa-fw"></i>Stats</button>
+    <button class="dnav-btn"        id="d-settings" onclick="nav('settings')" style="margin-top:auto">
+      <i class="fa-solid fa-gear fa-fw"></i>Settings
+    </button>
+  </nav>
+
+  <!-- ── Content area ─────────────────────────────────── -->
+  <div id="content-wrap">
+
+    <!-- ══ HOME ══════════════════════════════════════════ -->
+    <div id="view-home" class="view active">
+      <div class="p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <div style="font-size:12px;color:var(--muted)" id="home-date"></div>
+            <h4 class="mb-0 fw-bold">Today</h4>
+          </div>
+          <button class="btn btn-sm" style="background:var(--bg3);color:var(--text)" onclick="nav('settings')">
+            <i class="fa-solid fa-gear"></i>
+          </button>
+        </div>
+
+        <div class="mb-4">
+          <div class="section-lbl">This Week</div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px" id="week-strip"></div>
+        </div>
+
+        <div class="mb-4" id="today-suggest"></div>
+
+        <div class="mb-4">
+          <div class="section-lbl">Start a Workout</div>
+          <div id="quick-btns"></div>
+        </div>
+
+        <div>
+          <div class="section-lbl">Recent</div>
+          <div id="recent-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ WORKOUT ════════════════════════════════════════ -->
+    <div id="view-workout" class="view">
+
+      <div id="wkt-hdr" style="display:none">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div id="wkt-type-badge" class="type-pill mb-1"></div>
+            <div class="elapsed" id="elapsed">0:00</div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary" id="sets-badge">0 sets</span>
+            <button class="btn btn-sm" style="background:transparent;color:#ef4444;border:1px solid #ef444455;font-size:12px;padding:3px 10px" onclick="discardWorkout()" title="Discard workout">
+              <i class="fa-solid fa-xmark me-1"></i>Discard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="no-wkt" class="text-center p-5">
+        <i class="fa-solid fa-dumbbell fa-3x text-muted d-block mb-3"></i>
+        <h6 class="text-muted">No active workout</h6>
+        <button class="btn btn-primary mt-2" onclick="nav('home')">Go to Home</button>
+      </div>
+
+      <div id="wkt-scroll" style="display:none"></div>
+
+      <div id="finish-bar" style="display:none">
+        <button class="btn btn-success w-100 py-3 fw-bold fs-6" onclick="finishWorkout()">
+          <i class="fa-solid fa-flag-checkered me-2"></i>Finish Workout
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ══ HISTORY ════════════════════════════════════════ -->
+    <div id="view-history" class="view">
+      <div class="p-3">
+        <h4 class="fw-bold mb-3">History</h4>
+
+        <div class="card2 mb-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-sm" style="background:var(--bg4);color:var(--text)" onclick="calPrev()">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <span class="fw-bold" id="cal-label"></span>
+            <button class="btn btn-sm" style="background:var(--bg4);color:var(--text)" onclick="calNext()">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+          <div class="cal-grid mb-2">
+            <div class="dh">Su</div><div class="dh">Mo</div><div class="dh">Tu</div>
+            <div class="dh">We</div><div class="dh">Th</div><div class="dh">Fr</div><div class="dh">Sa</div>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div class="d-flex flex-wrap gap-3 mt-3">
+            <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <span style="width:11px;height:11px;border-radius:3px;background:var(--push);display:inline-block"></span>Push</span>
+            <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <span style="width:11px;height:11px;border-radius:3px;background:var(--pull);display:inline-block"></span>Pull</span>
+            <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <span style="width:11px;height:11px;border-radius:3px;background:var(--legs);display:inline-block"></span>Legs</span>
+            <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <span style="width:11px;height:11px;border-radius:3px;background:var(--swim);display:inline-block"></span>Swim</span>
+            <span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <span style="width:11px;height:11px;border-radius:3px;background:var(--cardio);display:inline-block"></span>Cardio/Abs</span>
+          </div>
+        </div>
+
+        <div id="day-detail" style="display:none" class="mb-4">
+          <div class="section-lbl" id="day-detail-lbl"></div>
+          <div id="day-detail-body"></div>
+        </div>
+
+        <div class="section-lbl">All Workouts</div>
+        <div id="all-wkts"></div>
+      </div>
+    </div>
+
+    <!-- ══ STATS ══════════════════════════════════════════ -->
+    <div id="view-stats" class="view">
+      <div class="p-3">
+        <h4 class="fw-bold mb-3">Stats</h4>
+
+        <div class="card2 mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="fw-bold">Weekly Volume</span>
+            <small class="text-muted" id="vol-lbl"></small>
+          </div>
+          <div id="vol-bars"></div>
+        </div>
+
+        <div class="card2 mb-3">
+          <div class="fw-bold mb-3">This Week</div>
+          <div id="week-summary"></div>
+        </div>
+
+        <div class="card2">
+          <div class="fw-bold mb-3">
+            Personal Records
+            <span class="text-muted" style="font-size:12px;font-weight:400">(estimated 1RM)</span>
+          </div>
+          <div id="pr-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ═══════════════════════════════════════ -->
+    <div id="view-settings" class="view">
+      <div class="p-3">
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <button class="btn btn-sm" style="background:var(--bg4);color:var(--text)" onclick="nav('home')">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <h4 class="mb-0 fw-bold">Settings</h4>
+        </div>
+
+        <div class="card2 mb-3">
+          <div class="fw-bold mb-2">Weight Unit</div>
+          <div class="btn-group w-100">
+            <input type="radio" class="btn-check" name="wu" id="wu-lbs" value="lbs">
+            <label class="btn btn-outline-primary" for="wu-lbs">lbs</label>
+            <input type="radio" class="btn-check" name="wu" id="wu-kg" value="kg">
+            <label class="btn btn-outline-primary" for="wu-kg">kg</label>
+          </div>
+        </div>
+
+        <div class="card2 mb-3">
+          <div class="fw-bold mb-3">Weekly Schedule</div>
+          <div id="sched-editor"></div>
+        </div>
+
+        <div class="card2 mb-3">
+          <div class="fw-bold mb-3">Default Rest Times (sec)</div>
+          <div id="rest-editor"></div>
+        </div>
+
+        <div class="card2 mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="fw-bold">Workout Templates</span>
+            <span class="text-muted" style="font-size:12px">exercises loaded on start</span>
+          </div>
+          <!-- type tabs -->
+          <div class="d-flex gap-2 flex-wrap mb-3" id="tmpl-tabs"></div>
+          <!-- exercise list for selected type -->
+          <div id="tmpl-body"></div>
+        </div>
+
+        <div class="card2">
+          <div class="fw-bold mb-3">Data</div>
+          <div class="d-flex gap-2 mb-2">
+            <button class="btn btn-outline-secondary flex-fill" onclick="exportData()">
+              <i class="fa-solid fa-download me-2"></i>Export Backup
+            </button>
+            <button class="btn btn-outline-secondary flex-fill" onclick="document.getElementById('import-file').click()">
+              <i class="fa-solid fa-upload me-2"></i>Import Backup
+            </button>
+          </div>
+          <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+          <p class="text-muted mb-3" style="font-size:12px">
+            Export saves all workouts, PRs and settings to a <code>.json</code> file on your device. Import it anytime to restore — even after clearing your browser.
+          </p>
+          <button class="btn btn-outline-danger w-100" onclick="clearData()">
+            <i class="fa-solid fa-trash me-2"></i>Clear All Data
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end content-wrap -->
+</div><!-- end desk-layout -->
+
+<!-- ── Mobile bottom nav ──────────────────────────────── -->
+<nav id="bot-nav">
+  <button class="bnav-btn active" id="b-home"    onclick="nav('home')"><i class="fa-solid fa-house"></i><span>Home</span></button>
+  <button class="bnav-btn"        id="b-workout" onclick="nav('workout')"><i class="fa-solid fa-dumbbell"></i><span>Workout</span></button>
+  <button class="bnav-btn"        id="b-history" onclick="nav('history')"><i class="fa-solid fa-calendar"></i><span>History</span></button>
+  <button class="bnav-btn"        id="b-stats"   onclick="nav('stats')"><i class="fa-solid fa-chart-bar"></i><span>Stats</span></button>
+</nav>
+
+<!-- ── Rest timer overlay ─────────────────────────────── -->
+<div id="rest-ovl">
+  <div class="text-center">
+    <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Rest Timer</div>
+    <div class="t-ring" id="t-ring">
+      <div class="t-inner">
+        <div class="t-num" id="t-num">90</div>
+        <div class="t-lbl">seconds</div>
+      </div>
+    </div>
+    <div style="font-size:15px;color:#94a3b8;margin:16px 0 24px" id="t-exname"></div>
+    <div class="d-flex gap-3 justify-content-center">
+      <button class="btn btn-outline-light px-4" onclick="skipTimer()">
+        <i class="fa-solid fa-forward-fast me-2"></i>Skip
+      </button>
+      <button class="btn" style="background:var(--bg4);color:var(--text)" onclick="addRestTime(15)">+15s</button>
+      <button class="btn" style="background:var(--bg4);color:var(--text)" onclick="addRestTime(-15)">−15s</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Custom modal ───────────────────────────────────── -->
+<div id="modal-ovl">
+  <div class="modal-box">
+    <div id="modal-title" class="fw-bold mb-2" style="font-size:16px"></div>
+    <div id="modal-msg"   class="text-muted mb-3" style="font-size:14px"></div>
+    <input id="modal-input" type="text" placeholder="" style="display:none;margin-bottom:16px">
+    <div class="d-flex gap-2 justify-content-end">
+      <button id="modal-cancel" class="btn btn-outline-secondary" style="display:none" onclick="closeModal(false)">Cancel</button>
+      <button id="modal-ok"     class="btn btn-primary"                                onclick="modalOK()">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="liftlog.js"></script>
+</body>
+</html>

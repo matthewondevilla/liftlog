@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  liftlog:
+    build: .
+    container_name: liftlog
+    restart: unless-stopped
+    ports:
+      - "3456:3000"          # change 3456 to any free port you want
+    volumes:
+      - /mnt/media/liftlog:/app/data   # data persists here on your host
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
