@@ -358,10 +358,11 @@ async function startType(type) {
       sets: [],
     })),
   };
-  // Pre-fill first set from last session
+  // Pre-fill first set from last session + set target sets
   S.active.exercises.forEach(ex => {
     const last = getLastSession(type, ex.name);
-    ex.sets = [{ w: last?.[0]?.w ?? 0, r: last?.[0]?.r ?? 0, done: false }];
+    ex.sets       = [{ w: last?.[0]?.w ?? 0, r: last?.[0]?.r ?? 0, done: false }];
+    ex.targetSets = last ? last.length : 3; // default 3, or match last session count
   });
   save();
   nav('workout');
@@ -443,18 +444,34 @@ function renderExCard(ex, ei) {
       </div>${badges}</div>`;
   }
 
-  const doneCnt = ex.sets.filter(s => s.done).length;
-  const setsRows = ex.sets.map((s, si) => renderSetRow(s, ei, si, valLbl, step)).join('');
+  const doneCnt   = ex.sets.filter(s => s.done).length;
+  const target    = ex.targetSets ?? 3;
+  const complete  = doneCnt >= target;
+  const setsRows  = ex.sets.map((s, si) => renderSetRow(s, ei, si, valLbl, step)).join('');
 
-  return `<div class="ex-card" id="ex-${ei}">
+  return `<div class="ex-card" id="ex-${ei}" style="${complete ? 'opacity:.6' : ''}">
     <div class="ex-hdr" onclick="toggleEx(${ei})">
-      <div>
-        <div class="ex-name">${ex.name}${doneCnt ? ` <span class="badge ms-2" style="background:#14532d;color:#4ade80;font-size:10px">${doneCnt}✓</span>` : ''}</div>
-        <div class="d-flex gap-2 mt-1 flex-wrap">
+      <div style="flex:1;min-width:0">
+        <div class="ex-name d-flex align-items-center gap-2 flex-wrap">
+          ${complete ? `<i class="fa-solid fa-circle-check" style="color:#4ade80"></i>` : ''}
+          <span style="${complete ? 'text-decoration:line-through;color:var(--muted)' : ''}">${ex.name}</span>
+          <span style="font-size:11px;color:${complete ? '#4ade80' : '#94a3b8'};white-space:nowrap">
+            ${doneCnt}/${target} sets
+          </span>
+        </div>
+        <div class="d-flex gap-2 mt-1 flex-wrap align-items-center">
           <span class="badge" style="background:var(--bg4);color:#94a3b8;font-size:10px">
             <i class="fa-solid fa-stopwatch me-1"></i>${ex.rest}s
           </span>
           <span class="badge" style="background:var(--bg4);color:#94a3b8;font-size:10px">${ex.mg}</span>
+          <!-- target sets adjuster -->
+          <span style="display:flex;align-items:center;gap:3px;background:var(--bg4);border-radius:6px;padding:1px 6px">
+            <button onclick="event.stopPropagation();adjTarget(${ei},-1)"
+              style="background:none;border:none;color:#94a3b8;font-size:13px;padding:0 2px;cursor:pointer;line-height:1">−</button>
+            <span style="font-size:10px;color:#94a3b8;min-width:36px;text-align:center">Goal: ${target}</span>
+            <button onclick="event.stopPropagation();adjTarget(${ei},+1)"
+              style="background:none;border:none;color:#94a3b8;font-size:13px;padding:0 2px;cursor:pointer;line-height:1">+</button>
+          </span>
         </div>
       </div>
       <div class="d-flex align-items-center gap-2">
@@ -571,12 +588,8 @@ function logSet(ei, si) {
     }
   }
 
-  // Refresh done-count badge in header
-  const nameEl = document.querySelector(`#ex-${ei} .ex-name`);
-  if (nameEl) {
-    const dc = ex.sets.filter(s => s.done).length;
-    nameEl.innerHTML = ex.name + ` <span class="badge ms-2" style="background:#14532d;color:#4ade80;font-size:10px">${dc}✓</span>`;
-  }
+  // Refresh header (sets counter + complete state)
+  refreshExHeader(ei);
 
   save();
   updateSetsCount();
@@ -589,6 +602,44 @@ function logSet(ei, si) {
 
   // Start rest timer
   if (ex.rest > 0) startTimer(ex.rest, ex.name);
+}
+
+function refreshExHeader(ei) {
+  const ex       = S.active?.exercises[ei];
+  if (!ex) return;
+  const card     = document.getElementById('ex-' + ei);
+  if (!card) return;
+  const doneCnt  = ex.sets.filter(s => s.done).length;
+  const target   = ex.targetSets ?? 3;
+  const complete = doneCnt >= target;
+
+  // dim card when complete
+  card.style.opacity = complete ? '0.6' : '1';
+
+  const nameEl = card.querySelector('.ex-name');
+  if (nameEl) {
+    nameEl.innerHTML = `
+      ${complete ? `<i class="fa-solid fa-circle-check" style="color:#4ade80"></i>` : ''}
+      <span style="${complete ? 'text-decoration:line-through;color:var(--muted)' : ''}">${ex.name}</span>
+      <span style="font-size:11px;color:${complete ? '#4ade80' : '#94a3b8'};white-space:nowrap">
+        ${doneCnt}/${target} sets
+      </span>`;
+  }
+  // Update goal adjuster label
+  const goalEl = card.querySelector('.goal-lbl');
+  if (goalEl) goalEl.textContent = `Goal: ${target}`;
+}
+
+function adjTarget(ei, delta) {
+  const ex = S.active?.exercises[ei];
+  if (!ex) return;
+  ex.targetSets = Math.max(1, (ex.targetSets ?? 3) + delta);
+  save();
+  refreshExHeader(ei);
+  // also update the inline label without full re-render
+  const card = document.getElementById('ex-' + ei);
+  const goalEl = card?.querySelector('span[style*="min-width:36px"]');
+  if (goalEl) goalEl.textContent = `Goal: ${ex.targetSets}`;
 }
 
 function addSet(ei) {
@@ -720,46 +771,125 @@ function checkPR(name, w, r) {
 // ─────────────────────────────────────────────────────────
 // REST TIMER
 // ─────────────────────────────────────────────────────────
-let timerIv = null, timerRem = 0, timerTot = 0;
+// ── Timer state ─────────────────────────────────────────
+let timerIv    = null;
+let timerEndAt = 0;   // absolute ms timestamp when timer finishes
+let timerTot   = 0;   // total duration in seconds (for progress ring)
+let timerName  = '';
+let _notifTimeout = null;
+
+// ── Notification permission (request once on first timer) ─
+async function ensureNotifPermission() {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+}
+
+function scheduleNotif(secs, name) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  clearTimeout(_notifTimeout);
+  _notifTimeout = setTimeout(() => {
+    try {
+      new Notification('LiftLog — Rest over!', {
+        body: `Time to hit ${name} 💪`,
+        silent: false,
+      });
+    } catch (e) { /* notification blocked */ }
+  }, secs * 1000);
+}
 
 function startTimer(secs, name) {
+  ensureNotifPermission();
   if (timerIv) clearInterval(timerIv);
-  timerRem = secs; timerTot = secs;
+  timerEndAt = Date.now() + secs * 1000;
+  timerTot   = secs;
+  timerName  = name;
+  // Persist so we can recover if user switches apps
+  localStorage.setItem('ll_timer', JSON.stringify({ endAt: timerEndAt, tot: secs, name }));
   document.getElementById('t-exname').textContent = name;
   document.getElementById('rest-ovl').classList.add('on');
   drawTimer();
   timerIv = setInterval(() => {
-    timerRem--;
-    drawTimer();
-    if (timerRem <= 0) { clearInterval(timerIv); timerIv = null; timerDone(); }
-  }, 1000);
+    const rem = Math.ceil((timerEndAt - Date.now()) / 1000);
+    if (rem <= 0) { clearInterval(timerIv); timerIv = null; timerDone(); }
+    else drawTimer();
+  }, 250); // tick 4× per second for smooth display
+  scheduleNotif(secs, name);
 }
 
 function drawTimer() {
-  document.getElementById('t-num').textContent = timerRem;
-  const pct = timerTot > 0 ? (1 - timerRem / timerTot) * 100 : 0;
-  const col = timerRem <= 5 ? '#ef4444' : '#3b82f6';
+  const rem = Math.max(0, Math.ceil((timerEndAt - Date.now()) / 1000));
+  document.getElementById('t-num').textContent = rem;
+  const pct = timerTot > 0 ? (1 - rem / timerTot) * 100 : 0;
+  const col = rem <= 5 ? '#ef4444' : '#3b82f6';
   document.getElementById('t-ring').style.background =
     `conic-gradient(${col} ${pct}%, #2d2d44 ${pct}%)`;
 }
 
 function skipTimer() {
   if (timerIv) { clearInterval(timerIv); timerIv = null; }
+  clearTimeout(_notifTimeout);
+  timerEndAt = 0;
+  localStorage.removeItem('ll_timer');
   document.getElementById('rest-ovl').classList.remove('on');
 }
 
 function addRestTime(d) {
-  timerRem = Math.max(0, timerRem + d);
-  timerTot = Math.max(timerTot, timerRem);
+  timerEndAt += d * 1000;
+  if (d > 0) timerTot += d;
   drawTimer();
+  // Reschedule notification
+  const rem = Math.ceil((timerEndAt - Date.now()) / 1000);
+  scheduleNotif(rem, timerName);
 }
 
 function timerDone() {
+  clearTimeout(_notifTimeout);
+  timerEndAt = 0;
+  localStorage.removeItem('ll_timer');
   document.getElementById('rest-ovl').classList.remove('on');
   playBeep();
   if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
   showToast('Rest done — go! 💪', 'success', 2500);
 }
+
+// ── Recover timer when returning from background / switching apps ─
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (timerEndAt > 0) {
+    const rem = Math.ceil((timerEndAt - Date.now()) / 1000);
+    if (rem <= 0) {
+      if (timerIv) { clearInterval(timerIv); timerIv = null; }
+      timerDone();
+    } else {
+      drawTimer();
+    }
+    return;
+  }
+  // No active in-memory timer — check localStorage in case page was reloaded
+  try {
+    const saved = JSON.parse(localStorage.getItem('ll_timer') || 'null');
+    if (saved && saved.endAt) {
+      const rem = Math.ceil((saved.endAt - Date.now()) / 1000);
+      if (rem > 0) {
+        timerEndAt = saved.endAt;
+        timerTot   = saved.tot;
+        timerName  = saved.name;
+        document.getElementById('t-exname').textContent = saved.name;
+        document.getElementById('rest-ovl').classList.add('on');
+        drawTimer();
+        timerIv = setInterval(() => {
+          const r = Math.ceil((timerEndAt - Date.now()) / 1000);
+          if (r <= 0) { clearInterval(timerIv); timerIv = null; timerDone(); }
+          else drawTimer();
+        }, 250);
+      } else {
+        localStorage.removeItem('ll_timer');
+      }
+    }
+  } catch (e) { /* ignore */ }
+});
 
 let actx = null;
 function playBeep() {

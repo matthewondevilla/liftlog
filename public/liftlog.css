@@ -33,7 +33,13 @@ select { background: var(--bg4) !important; border-color: var(--bg4) !important;
 option { background: var(--bg2); }
 
 /* ── Desktop sidebar layout ─────────────────────────────── */
-#desk-layout { display: flex; height: 100vh; overflow: hidden; }
+/* On mobile, shrink layout so it sits above the fixed bottom nav */
+#desk-layout {
+  display: flex;
+  height: calc(100vh - var(--nav-h));
+  height: calc(100dvh - var(--nav-h)); /* dvh accounts for mobile browser chrome */
+  overflow: hidden;
+}
 
 #desk-nav {
   display: none;
@@ -309,6 +315,8 @@ option { background: var(--bg2); }
   body { padding-bottom: 0; }
   #bot-nav { display: none; }
   #desk-nav { display: flex; }
+  /* On desktop there's no bottom nav, so layout can use full viewport */
+  #desk-layout { height: 100vh; height: 100dvh; }
   .cal-cell { font-size: 16px; border-radius: 12px; }
   .cal-grid { gap: 7px; }
 }
