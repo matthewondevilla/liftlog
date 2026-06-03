@@ -32,13 +32,11 @@ input[type=number] { -moz-appearance: textfield; }
 select { background: var(--bg4) !important; border-color: var(--bg4) !important; color: var(--text) !important; }
 option { background: var(--bg2); }
 
-/* ── Desktop sidebar layout ─────────────────────────────── */
-/* On mobile, shrink layout so it sits above the fixed bottom nav */
+/* ── Layout ─────────────────────────────────────────────── */
+/* Mobile: no fixed height — body scrolls naturally, immune to browser toolbars */
 #desk-layout {
   display: flex;
-  height: calc(100vh - var(--nav-h));
-  height: calc(100dvh - var(--nav-h)); /* dvh accounts for mobile browser chrome */
-  overflow: hidden;
+  min-height: 100%;
 }
 
 #desk-nav {
@@ -69,25 +67,18 @@ option { background: var(--bg2); }
 #content-wrap {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  height: 100%;
 }
 
 /* ── Views ──────────────────────────────────────────────── */
 .view { display: none; }
 .view.active { display: block; }
 
-/* Workout view uses flex column so finish bar sticks naturally */
+/* Workout view — mobile: normal page flow, finish bar sticky */
 #view-workout.active {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  display: block;
 }
 #wkt-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px 14px 24px;
+  padding: 14px 14px 8px;
 }
 
 /* ── Bottom nav (mobile) ────────────────────────────────── */
@@ -117,16 +108,20 @@ option { background: var(--bg2); }
 #wkt-hdr {
   padding: 14px 16px;
   border-bottom: 1px solid var(--bg4);
-  flex-shrink: 0;
   background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 91;
 }
 
-/* ── Finish bar ─────────────────────────────────────────── */
+/* ── Finish bar — sticky above the mobile bottom nav ────── */
 #finish-bar {
-  flex-shrink: 0;
+  position: sticky;
+  bottom: var(--nav-h);
   padding: 10px 16px 12px;
   background: var(--bg);
   border-top: 1px solid var(--bg4);
+  z-index: 90;
 }
 
 /* ── Exercise cards ─────────────────────────────────────── */
@@ -315,8 +310,17 @@ option { background: var(--bg2); }
   body { padding-bottom: 0; }
   #bot-nav { display: none; }
   #desk-nav { display: flex; }
-  /* On desktop there's no bottom nav, so layout can use full viewport */
-  #desk-layout { height: 100vh; height: 100dvh; }
+  /* Desktop: fixed-height flex layout so sidebar + content fill viewport */
+  #desk-layout    { height: 100vh; height: 100dvh; overflow: hidden; }
+  #content-wrap   { overflow-y: auto; height: 100%; }
+  /* Restore flex-column workout view on desktop */
+  #view-workout.active {
+    display: flex; flex-direction: column;
+    height: 100%; overflow: hidden;
+  }
+  #wkt-scroll     { flex: 1; overflow-y: auto; }
+  #wkt-hdr        { position: static; }
+  #finish-bar     { position: static; bottom: auto; }
   .cal-cell { font-size: 16px; border-radius: 12px; }
   .cal-grid { gap: 7px; }
 }
