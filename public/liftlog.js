@@ -91,11 +91,14 @@ let S = {
 
 // Debounce saves so rapid set-logging doesn't hammer the server
 let _saveTimer = null;
+let _pendingSave = false;
 function save() {
+  _pendingSave = true;
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_flushSave, 400);
 }
 function _flushSave() {
+  _pendingSave = false;
   fetch('/api/data', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -1407,4 +1410,16 @@ function p2(n)      { return n.toString().padStart(2, '0'); }
     }
   }
   nav('home');
+
+  // Flush any pending debounced save when the page is closing (e.g. browser Fire button)
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && _pendingSave) {
+      clearTimeout(_saveTimer);
+      _pendingSave = false;
+      navigator.sendBeacon('/api/data', new Blob(
+        [JSON.stringify({ workouts: S.workouts, prs: S.prs, settings: S.settings, active: S.active })],
+        { type: 'application/json' }
+      ));
+    }
+  });
 })();

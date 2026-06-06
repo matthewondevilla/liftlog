@@ -39,6 +39,20 @@ app.get('/api/data', (req, res) => {
   res.json(readDB());
 });
 
+// POST /api/data  → same as PUT, used by sendBeacon on page unload
+app.post('/api/data', (req, res) => {
+  const body = req.body;
+  if (!body || typeof body !== 'object') return res.sendStatus(204);
+  const safe = {
+    workouts: Array.isArray(body.workouts) ? body.workouts : [],
+    prs:      (body.prs && typeof body.prs === 'object') ? body.prs : {},
+    settings: (body.settings && typeof body.settings === 'object') ? body.settings : {},
+    active:   body.active ?? null,
+  };
+  writeDB(safe);
+  res.sendStatus(204);
+});
+
 // PUT  /api/data  → full replace (client sends entire state)
 app.put('/api/data', (req, res) => {
   const body = req.body;
