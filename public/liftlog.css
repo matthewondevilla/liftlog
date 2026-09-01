@@ -73,9 +73,10 @@ option { background: var(--bg2); }
 .view { display: none; }
 .view.active { display: block; }
 
-/* Workout view — mobile: normal page flow, finish bar sticky */
+/* Workout view — reserve room for the fixed finish action on mobile */
 #view-workout.active {
   display: block;
+  padding-bottom: 78px;
 }
 #wkt-scroll {
   padding: 14px 14px 8px;
@@ -114,9 +115,11 @@ option { background: var(--bg2); }
   z-index: 91;
 }
 
-/* ── Finish bar — sticky above the mobile bottom nav ────── */
+/* ── Finish bar — always visible above the mobile bottom nav ─── */
 #finish-bar {
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: var(--nav-h);
   padding: 10px 16px 12px;
   background: var(--bg);
@@ -176,6 +179,12 @@ option { background: var(--bg2); }
   padding: 9px 12px; margin: 0 12px 6px;
   border-radius: 0 6px 6px 0; font-size: 12px; color: #94a3b8;
 }
+.recommend-ref {
+  margin: 0 12px 8px; padding: 8px 10px;
+  border-radius: 7px; background: #3b82f616; color: #93c5fd;
+  font-size: 12px; border: 1px solid #3b82f633;
+}
+.recommend-ref span { color: var(--muted); margin-left: 4px; }
 
 /* ── Rest timer overlay ─────────────────────────────────── */
 #rest-ovl {
@@ -203,6 +212,21 @@ option { background: var(--bg2); }
   align-items: center; justify-content: center; padding: 24px;
 }
 #modal-ovl.on { display: flex; }
+#rir-ovl {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.82); z-index: 10600;
+  align-items: center; justify-content: center; padding: 24px;
+}
+#rir-ovl.on { display: flex; }
+.rir-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+.rir-grid button {
+  min-height: 76px; border: 1px solid var(--bg4); border-radius: 10px;
+  background: var(--bg4); color: var(--text); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.rir-grid button:active { transform: scale(.97); background: #3d3d5c; }
+.rir-grid strong { font-size: 21px; }
+.rir-grid span { color: #94a3b8; font-size: 11px; }
 .modal-box {
   background: var(--bg3); border: 1px solid var(--bg4);
   border-radius: 16px; padding: 24px;
@@ -316,7 +340,7 @@ option { background: var(--bg2); }
   /* Restore flex-column workout view on desktop */
   #view-workout.active {
     display: flex; flex-direction: column;
-    height: 100%; overflow: hidden;
+    height: 100%; overflow: hidden; padding-bottom: 0;
   }
   #wkt-scroll     { flex: 1; overflow-y: auto; }
   #wkt-hdr        { position: static; }

@@ -74,6 +74,8 @@ const MG_ORDER = ['chest','back','shoulders','biceps','triceps','quads','hamstri
 
 const DEFAULT_SCHED = { 0:'Rest', 1:'Push', 2:'Pull', 3:'Legs', 4:'Rest', 5:'Push', 6:'Swim' };
 const DAY_NAMES     = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TARGET_REPS   = 8;
+const RIR_INCREASE  = { 0: 0, 1: 0, 2: 5, 3: 10 };
 
 // ─────────────────────────────────────────────────────────
 // STATE
@@ -182,6 +184,22 @@ document.addEventListener('keydown', e => {
 
 function askConfirm(msg)        { return _showModal('Confirm', msg, false, null, 'Cancel', 'OK'); }
 function askPrompt(msg, defVal) { return _showModal('', msg, true, defVal, 'Cancel', 'OK'); }
+
+let _rirResolve = null;
+function askRIR(exerciseName, weight, reps) {
+  return new Promise(resolve => {
+    _rirResolve = resolve;
+    document.getElementById('rir-set').textContent = `${exerciseName}: ${weight} × ${reps}`;
+    document.getElementById('rir-ovl').classList.add('on');
+  });
+}
+function chooseRIR(value) {
+  document.getElementById('rir-ovl').classList.remove('on');
+  if (_rirResolve) {
+    _rirResolve(value);
+    _rirResolve = null;
+  }
+}
 
 // ─────────────────────────────────────────────────────────
 // TOAST
@@ -361,10 +379,12 @@ async function startType(type) {
       sets: [],
     })),
   };
-  // Pre-fill first set from last session + set target sets
+  // History selects one recommended 8-rep working weight; exact old sets are
+  // deliberately not copied. Inputs remain editable for warmups and deloads.
   S.active.exercises.forEach(ex => {
     const last = getLastSession(type, ex.name);
-    ex.sets       = [{ w: last?.[0]?.w ?? 0, r: last?.[0]?.r ?? 0, done: false }];
+    const startWeight = ex.unit === 'wt' ? getStartingRecommendation(ex.name) : (last?.[0]?.w ?? 0);
+    ex.sets       = [{ w: startWeight, r: ex.unit === 'wt' ? TARGET_REPS : (last?.[0]?.r ?? 0), done: false }];
     ex.targetSets = last ? last.length : 3; // default 3, or match last session count
   });
   save();
@@ -447,6 +467,17 @@ function renderExCard(ex, ei) {
       </div>${badges}</div>`;
   }
 
+  let recommendationHTML = '';
+  if (ex.unit === 'wt') {
+    const floor = getEightRepFloor(ex.name);
+    const next = ex.sets.find(s => !s.done)?.w ?? getStartingRecommendation(ex.name);
+    recommendationHTML = `<div class="recommend-ref" id="recommend-${ei}">
+      <i class="fa-solid fa-bullseye me-1"></i>
+      Recommended: <strong>${next}${valLbl} × ${TARGET_REPS}</strong>
+      ${floor > 0 ? `<span>· 8-rep floor ${floor}${valLbl}</span>` : ''}
+    </div>`;
+  }
+
   const doneCnt   = ex.sets.filter(s => s.done).length;
   const target    = ex.targetSets ?? 3;
   const complete  = doneCnt >= target;
@@ -491,6 +522,7 @@ function renderExCard(ex, ei) {
     </div>
     <div class="ex-body" id="exb-${ei}">
       ${lastHTML}
+      ${recommendationHTML}
       <div class="set-row" style="padding:4px 12px">
         <div class="set-num" style="font-size:10px">Set</div>
         <div style="text-align:center;font-size:10px;color:var(--muted)">${valLbl}</div>
@@ -557,7 +589,7 @@ function setVal(field, ei, si, v) {
   save();
 }
 
-function logSet(ei, si) {
+async function logSet(ei, si) {
   const ex  = S.active.exercises[ei];
   const set = ex.sets[si];
   if (!set || set.done) return;
@@ -566,6 +598,10 @@ function logSet(ei, si) {
   set.r    = parseInt(document.getElementById(`r-${ei}-${si}`)?.value)   || 0;
   set.done = true;
   set.ts   = Date.now();
+
+  if (ex.unit === 'wt') {
+    set.rir = await askRIR(ex.name, set.w, set.r);
+  }
 
   // Update row in-place
   const row = document.getElementById(`sr-${ei}-${si}`);
@@ -577,17 +613,32 @@ function logSet(ei, si) {
     if (lb) { lb.classList.add('done'); lb.innerHTML = '<i class="fa-solid fa-check"></i>'; }
   }
 
-  // Auto-append next set if this was the last
+  // Auto-append the recommendation as an editable set row.
   if (si === ex.sets.length - 1) {
-    ex.sets.push({ w: set.w, r: set.r, done: false });
+    const nextWeight = ex.unit === 'wt'
+      ? getNextRecommendation(ex.name, set.w, set.rir)
+      : set.w;
+    const nextReps = ex.unit === 'wt' ? TARGET_REPS : set.r;
+    ex.sets.push({ w: nextWeight, r: nextReps, done: false, recommended: ex.unit === 'wt' });
     const container = document.getElementById(`setrows-${ei}`);
     if (container) {
       const unit = resolveUnit(ex.unit);
       const valLbl = ex.unit === 'wt' ? unit : ex.unit;
       const step = ex.unit === 'wt' ? (unit === 'kg' ? 2.5 : 5) : ex.unit === 'm' ? 25 : 1;
       const div = document.createElement('div');
-      div.innerHTML = renderSetRow({ w: set.w, r: set.r, done: false }, ei, ex.sets.length - 1, valLbl, step);
+      div.innerHTML = renderSetRow(ex.sets[ex.sets.length - 1], ei, ex.sets.length - 1, valLbl, step);
       container.appendChild(div.firstElementChild);
+    }
+    if (ex.unit === 'wt') {
+      const recommendation = document.getElementById(`recommend-${ei}`);
+      if (recommendation) {
+        const floor = getEightRepFloor(ex.name);
+        const unit = resolveUnit(ex.unit);
+        recommendation.innerHTML = `<i class="fa-solid fa-bullseye me-1"></i>
+          Recommended: <strong>${nextWeight}${unit} × ${TARGET_REPS}</strong>
+          ${floor > 0 ? `<span>· 8-rep floor ${floor}${unit}</span>` : ''}`;
+      }
+      showToast(`Next ${ex.name}: ${nextWeight}${resolveUnit(ex.unit)} × ${TARGET_REPS}`, 'info', 3500);
     }
   }
 
@@ -659,6 +710,53 @@ function addSet(ei) {
     div.innerHTML = renderSetRow({ w: prev.w, r: prev.r, done: false }, ei, ex.sets.length - 1, valLbl, step);
     container.appendChild(div.firstElementChild);
   }
+}
+
+// Highest load ever completed for 8+ reps. Recommendations are clamped to
+// this value, but users can always type a lower weight themselves.
+function getEightRepFloor(name) {
+  let floor = 0;
+  S.workouts.forEach(w => (w.exercises || []).forEach(ex => {
+    if (ex.name !== name || ex.unit !== 'wt') return;
+    (ex.sets || []).forEach(set => {
+      if ((Number(set.r) || 0) >= TARGET_REPS) floor = Math.max(floor, Number(set.w) || 0);
+    });
+  }));
+  const activeEx = S.active?.exercises?.find(ex => ex.name === name && ex.unit === 'wt');
+  (activeEx?.sets || []).forEach(set => {
+    if (set.done && (Number(set.r) || 0) >= TARGET_REPS) floor = Math.max(floor, Number(set.w) || 0);
+  });
+  return floor;
+}
+
+function getNextRecommendation(name, weight, rir) {
+  const normalizedRir = Math.min(3, Math.max(0, Number(rir) || 0));
+  const incrementLbs = RIR_INCREASE[normalizedRir] || 0;
+  const increment = S.settings.unit === 'kg' ? incrementLbs * 0.45359237 : incrementLbs;
+  const step = S.settings.unit === 'kg' ? 2.5 : 5;
+  const raw = (Number(weight) || 0) + increment;
+  const rounded = Math.round(raw / step) * step;
+  return Math.max(getEightRepFloor(name), rounded);
+}
+
+function getStartingRecommendation(name) {
+  const floor = getEightRepFloor(name);
+  const past = [...S.workouts].sort((a, b) => {
+    const bt = Number(b.endTime || b.startTime) || new Date(b.date).getTime();
+    const at = Number(a.endTime || a.startTime) || new Date(a.date).getTime();
+    return bt - at;
+  });
+  for (const workout of past) {
+    const ex = (workout.exercises || []).find(item => item.name === name && item.unit === 'wt');
+    const sets = (ex?.sets || []).filter(set => (Number(set.w) || 0) > 0);
+    if (!sets.length) continue;
+    const latest = sets[sets.length - 1];
+    const basedOnHistory = latest.rir == null
+      ? Number(latest.w) || 0
+      : getNextRecommendation(name, latest.w, latest.rir);
+    return Math.max(floor, basedOnHistory);
+  }
+  return floor;
 }
 
 async function cfgRest(ei) {
