@@ -312,6 +312,26 @@ option { background: var(--bg2); }
 .sched-cell:hover { transform: translateY(-2px); }
 .sched-cell.today-cell { border-color: var(--push); }
 
+.profile-chip {
+  display: flex; align-items: center; gap: 7px; max-width: 150px;
+  background: var(--bg3); color: var(--text); border: 1px solid var(--bg4);
+  border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+}
+.profile-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#profile-ovl {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.82);
+  z-index: 10700; align-items: center; justify-content: center; padding: 24px;
+}
+#profile-ovl.on { display: flex; }
+.profile-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: 1px solid var(--bg4); background: var(--bg4); color: var(--text);
+  border-radius: 10px; padding: 11px 12px; margin-bottom: 8px;
+}
+.profile-row.active { border-color: var(--push); background: #3b82f619; }
+.profile-select { flex: 1; min-width: 0; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.profile-actions button { background: none; border: 0; color: #94a3b8; padding: 5px; }
+
 .hist-item {
   background: var(--bg3); border-radius: 10px;
   padding: 13px 15px; margin-bottom: 9px;

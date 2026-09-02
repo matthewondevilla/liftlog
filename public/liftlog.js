@@ -80,12 +80,40 @@ const RIR_INCREASE  = { 0: 0, 1: 0, 2: 5, 3: 10 };
 // ─────────────────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────────────────
-let S = {
-  active: null,
-  workouts: [],
-  prs: {},
-  settings: { unit: 'lbs', sched: { ...DEFAULT_SCHED }, restTimes: {} },
-};
+function newProfile(name = 'Profile') {
+  return {
+    name, active: null, workouts: [], prs: {},
+    settings: { unit: 'lbs', sched: { ...DEFAULT_SCHED }, restTimes: {}, customTemplates: {} },
+  };
+}
+
+let DB = { version: 2, currentProfileId: null, profiles: {} };
+let S = newProfile('My Profile');
+
+function profileId() {
+  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeProfile(profile, fallbackName = 'Profile') {
+  const p = profile && typeof profile === 'object' ? profile : {};
+  const defaults = newProfile(p.name || fallbackName);
+  const normalized = {
+    name: p.name || fallbackName,
+    active: p.active || null,
+    workouts: Array.isArray(p.workouts) ? p.workouts : [],
+    prs: p.prs || {},
+    settings: Object.assign(defaults.settings, p.settings || {}),
+  };
+  if (!normalized.settings.sched) normalized.settings.sched = { ...DEFAULT_SCHED };
+  if (!normalized.settings.restTimes) normalized.settings.restTimes = {};
+  if (!normalized.settings.customTemplates) normalized.settings.customTemplates = {};
+  return normalized;
+}
+
+function selectProfileState(id) {
+  DB.currentProfileId = id;
+  S = DB.profiles[id];
+}
 
 // ─────────────────────────────────────────────────────────
 // STORAGE  (server-backed — data lives in /data/liftlog.json)
@@ -104,12 +132,7 @@ function _flushSave() {
   fetch('/api/data', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      workouts: S.workouts,
-      prs:      S.prs,
-      settings: S.settings,
-      active:   S.active,
-    }),
+    body: JSON.stringify(DB),
   }).catch(err => console.warn('LiftLog save failed:', err));
 }
 
@@ -117,22 +140,27 @@ async function load() {
   try {
     const res  = await fetch('/api/data');
     const data = await res.json();
-    S.workouts = Array.isArray(data.workouts) ? data.workouts : [];
-    S.prs      = data.prs      || {};
-    const c    = data.settings || {};
-    S.settings = Object.assign(
-      { unit: 'lbs', sched: { ...DEFAULT_SCHED }, restTimes: {}, customTemplates: {} },
-      c
-    );
-    if (!S.settings.sched)           S.settings.sched           = { ...DEFAULT_SCHED };
-    if (!S.settings.customTemplates) S.settings.customTemplates = {};
-    S.active = data.active || null;
+    if (data.profiles && typeof data.profiles === 'object' && Object.keys(data.profiles).length) {
+      DB = { version: 2, currentProfileId: data.currentProfileId, profiles: {} };
+      Object.entries(data.profiles).forEach(([id, profile]) => {
+        DB.profiles[id] = normalizeProfile(profile);
+      });
+      const ids = Object.keys(DB.profiles);
+      selectProfileState(ids.includes(DB.currentProfileId) ? DB.currentProfileId : ids[0]);
+    } else {
+      // One-time, lossless migration from the original single-user format.
+      const id = profileId();
+      DB = { version: 2, currentProfileId: id, profiles: {
+        [id]: normalizeProfile(data, 'My Profile'),
+      }};
+      selectProfileState(id);
+      save();
+    }
   } catch (err) {
     console.warn('LiftLog load failed, starting empty:', err);
-    S.workouts = [];
-    S.prs      = {};
-    S.settings = { unit: 'lbs', sched: { ...DEFAULT_SCHED }, restTimes: {}, customTemplates: {} };
-    S.active   = null;
+    const id = profileId();
+    DB = { version: 2, currentProfileId: id, profiles: { [id]: newProfile('My Profile') } };
+    selectProfileState(id);
   }
 }
 
@@ -252,9 +280,113 @@ function nav(v) {
 }
 
 // ─────────────────────────────────────────────────────────
+// LOCAL PROFILES (separate data, no authentication)
+// ─────────────────────────────────────────────────────────
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[ch]));
+}
+
+function renderProfileNames() {
+  const name = S.name || 'Profile';
+  const home = document.getElementById('home-profile-name');
+  const settings = document.getElementById('settings-profile-name');
+  if (home) home.textContent = name;
+  if (settings) settings.textContent = `${name} · data stays separate from other profiles`;
+}
+
+function renderProfileList() {
+  const list = document.getElementById('profile-list');
+  if (!list) return;
+  const ids = Object.keys(DB.profiles);
+  list.innerHTML = ids.map(id => {
+    const profile = DB.profiles[id];
+    const active = id === DB.currentProfileId;
+    return `<div class="profile-row${active ? ' active' : ''}">
+      <button class="profile-select" onclick="switchProfile('${id}')">
+        <i class="fa-solid fa-circle-user me-2" style="color:${active ? 'var(--push)' : '#94a3b8'}"></i>
+        <strong>${escapeHTML(profile.name)}</strong>
+        ${active ? '<span class="text-muted ms-1" style="font-size:11px">Current</span>' : ''}
+      </button>
+      <div class="profile-actions">
+        <button onclick="renameProfile('${id}')" title="Rename"><i class="fa-solid fa-pen"></i></button>
+        ${ids.length > 1 ? `<button onclick="deleteProfile('${id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openProfiles() {
+  renderProfileList();
+  document.getElementById('profile-ovl').classList.add('on');
+}
+function closeProfiles() {
+  document.getElementById('profile-ovl').classList.remove('on');
+}
+
+function switchProfile(id) {
+  if (!DB.profiles[id] || id === DB.currentProfileId) { closeProfiles(); return; }
+  if (timerEndAt > 0) skipTimer();
+  selectProfileState(id);
+  save();
+  closeProfiles();
+  renderProfileNames();
+  nav('home');
+  showToast(`Switched to ${S.name}`, 'success', 2000);
+}
+
+async function addProfile() {
+  closeProfiles();
+  const name = await askPrompt('New profile name:', '');
+  const clean = String(name || '').trim().slice(0, 50);
+  if (!clean) return;
+  const id = profileId();
+  DB.profiles[id] = newProfile(clean);
+  selectProfileState(id);
+  save();
+  renderProfileNames();
+  nav('home');
+  showToast(`${clean} profile created`, 'success', 2500);
+}
+
+async function renameProfile(id) {
+  const profile = DB.profiles[id];
+  if (!profile) return;
+  closeProfiles();
+  const name = await askPrompt('Profile name:', profile.name);
+  const clean = String(name || '').trim().slice(0, 50);
+  if (!clean) return;
+  profile.name = clean;
+  save();
+  renderProfileNames();
+  openProfiles();
+}
+
+async function deleteProfile(id) {
+  const ids = Object.keys(DB.profiles);
+  const profile = DB.profiles[id];
+  if (!profile || ids.length <= 1) return;
+  closeProfiles();
+  const ok = await _showModal(
+    'Delete profile?',
+    `Delete ${profile.name} and all of this profile's workouts? This cannot be undone.`,
+    false, null, 'Cancel', 'Delete'
+  );
+  if (!ok) { openProfiles(); return; }
+  delete DB.profiles[id];
+  if (id === DB.currentProfileId) selectProfileState(Object.keys(DB.profiles)[0]);
+  save();
+  renderProfileNames();
+  nav('home');
+  showToast('Profile deleted', 'info', 2000);
+}
+
+// ─────────────────────────────────────────────────────────
 // HOME
 // ─────────────────────────────────────────────────────────
 function renderHome() {
+  renderProfileNames();
   document.getElementById('home-date').textContent = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric'
   });
@@ -1248,6 +1380,7 @@ function renderPRList() {
 // SETTINGS
 // ─────────────────────────────────────────────────────────
 function renderSettings() {
+  renderProfileNames();
   document.querySelectorAll('input[name="wu"]').forEach(r => {
     r.checked = r.value === S.settings.unit;
     r.onchange = () => { S.settings.unit = r.value; save(); };
@@ -1427,6 +1560,7 @@ function exportData() {
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
+    profileName: S.name,
     workouts: S.workouts,
     prs: S.prs,
     settings: S.settings,
@@ -1478,9 +1612,11 @@ async function importData(event) {
 }
 
 async function clearData() {
-  const ok = await askConfirm('Delete ALL workout history and PRs? This cannot be undone.');
+  const ok = await askConfirm(`Delete all workout history and PRs for ${S.name}? This cannot be undone.`);
   if (!ok) return;
-  S = { active: null, workouts: [], prs: {}, settings: { unit: 'lbs', sched: { ...DEFAULT_SCHED }, restTimes: {}, customTemplates: {} } };
+  const name = S.name;
+  DB.profiles[DB.currentProfileId] = newProfile(name);
+  selectProfileState(DB.currentProfileId);
   _flushSave();
   showToast('Data cleared', 'info', 2000);
   nav('home');
@@ -1515,7 +1651,7 @@ function p2(n)      { return n.toString().padStart(2, '0'); }
       clearTimeout(_saveTimer);
       _pendingSave = false;
       navigator.sendBeacon('/api/data', new Blob(
-        [JSON.stringify({ workouts: S.workouts, prs: S.prs, settings: S.settings, active: S.active })],
+        [JSON.stringify(DB)],
         { type: 'application/json' }
       ));
     }
